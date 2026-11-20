@@ -48,6 +48,10 @@ export const generateSchedule = (plantId) => {
   return axiosConfig.post(`/care-tasks/generate-schedule?plantId=${plantId}`);
 };
 
+export const getCareStatistics = () => {
+  return axiosConfig.get('/care-tasks/statistics');
+};
+
 export const rescheduleTask = (id, newDate) => {
   return axiosConfig.put(`/care-tasks/${id}/reschedule?newDate=${newDate}`);
 };

@@ -1,13 +1,18 @@
 package com.examly.plantcare.controller;
 
-import com.examly.plantcare.entity.CareTask;
-import com.examly.plantcare.service.CareTaskService;
-import lombok.RequiredArgsConstructor;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import com.examly.plantcare.dto.CareTaskRequest;
+import com.examly.plantcare.entity.CareTask;
+import com.examly.plantcare.service.CareTaskService;
+
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/care-tasks")
@@ -19,14 +24,14 @@ public class CareTaskController {
     @GetMapping
     public ResponseEntity<List<CareTask>> getTasks(
             @RequestParam(required = false) Long plantId,
-            @RequestParam(required = false) LocalDateTime date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime date,
             @RequestParam(required = false) CareTask.Status status) {
         return ResponseEntity.ok(careTaskService.getTasks(plantId, date, status));
     }
 
     @PostMapping
-    public ResponseEntity<CareTask> create(@RequestBody CareTask task) {
-        return ResponseEntity.ok(careTaskService.save(task));
+    public ResponseEntity<CareTask> create(@RequestBody CareTaskRequest request) {
+        return ResponseEntity.ok(careTaskService.create(request));
     }
 
     @GetMapping("/{id}")
@@ -37,11 +42,8 @@ public class CareTaskController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<CareTask> update(@PathVariable Long id, @RequestBody CareTask updated) {
-        return careTaskService.getById(id).map(task -> {
-            updated.setId(id);
-            return ResponseEntity.ok(careTaskService.save(updated));
-        }).orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<CareTask> update(@PathVariable Long id, @RequestBody CareTaskRequest request) {
+        return ResponseEntity.ok(careTaskService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
@@ -76,17 +78,19 @@ public class CareTaskController {
     }
 
     @PostMapping("/generate-schedule")
-    public ResponseEntity<?> generateSchedule(@RequestParam Long plantId) {
+    public ResponseEntity<List<CareTask>> generateSchedule(@RequestParam Long plantId) {
         return ResponseEntity.ok(careTaskService.generateSchedule(plantId));
     }
 
     @PutMapping("/{id}/reschedule")
-    public ResponseEntity<CareTask> reschedule(@PathVariable Long id, @RequestParam LocalDateTime newDate) {
+    public ResponseEntity<CareTask> reschedule(
+            @PathVariable Long id,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime newDate) {
         return ResponseEntity.ok(careTaskService.reschedule(id, newDate));
     }
 
     @GetMapping("/statistics")
-    public ResponseEntity<String> statistics() {
-        return ResponseEntity.ok("Statistics not implemented yet");
+    public ResponseEntity<Map<String, Object>> statistics() {
+        return ResponseEntity.ok(careTaskService.statistics());
     }
 }

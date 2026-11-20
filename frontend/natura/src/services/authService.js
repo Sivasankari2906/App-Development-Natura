@@ -37,10 +37,23 @@ export const register = async (userData) => {
 // Forgot Password
 export const forgotPassword = async (email) => {
   try {
-    const response = await axios.post(`${API_URL}/forgot-password?email=${email}`);
+    const response = await axios.post(`${API_URL}/forgot-password?email=${encodeURIComponent(email)}`);
     return response.data;
   } catch (error) {
     throw new Error(error.response?.data?.message || "Failed to send reset link.");
+  }
+};
+
+// Reset password with the token from the emailed link
+export const resetPassword = async (token, newPassword) => {
+  try {
+    const response = await axios.post(`${API_URL}/reset-password`, { token, newPassword });
+    return response.data;
+  } catch (error) {
+    if (!error.response) {
+      throw new Error("Cannot reach the server. Check that the backend is running.");
+    }
+    throw new Error(error.response.data?.message || "Could not reset the password.");
   }
 };
 

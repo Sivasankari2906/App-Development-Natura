@@ -18,6 +18,7 @@ import EnvironmentDashboard from "./components/environment/EnvironmentDashboard"
 // Health
 import HealthMonitor from "./components/health/HealthMonitor";
 import ForgotPassword from "./components/auth/ForgotPassword";
+import ResetPassword from "./components/auth/ResetPassword";
 import Dashboard from "./components/Dashboard";
 
 // Simple protected route wrapper
@@ -35,6 +36,7 @@ const App = () => {
         <Route path="/login" element={<LoginForm />} />
         <Route path="/register" element={<RegisterForm />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Dashboard → protected */}
         <Route

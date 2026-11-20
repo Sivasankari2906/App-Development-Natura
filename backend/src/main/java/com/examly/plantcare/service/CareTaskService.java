@@ -1,87 +1,252 @@
 package com.examly.plantcare.service;
 
-import com.examly.plantcare.entity.CareTask;
-import com.examly.plantcare.repository.CareTaskRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.examly.plantcare.dto.CareTaskRequest;
+import com.examly.plantcare.entity.CareTask;
+import com.examly.plantcare.entity.CareTask.Priority;
+import com.examly.plantcare.entity.CareTask.Status;
+import com.examly.plantcare.entity.CareTask.TaskType;
+import com.examly.plantcare.entity.Plant;
+import com.examly.plantcare.repository.CareTaskRepository;
+import com.examly.plantcare.repository.PlantRepository;
+import com.examly.plantcare.repository.UserRepository;
+import com.examly.plantcare.util.Access;
+
+import lombok.RequiredArgsConstructor;
+
+/** Care task logic. Every operation is limited to plants the current user owns (admins see all). */
 @Service
 @RequiredArgsConstructor
 public class CareTaskService {
 
+    /** Default care plan: how often each task repeats, in days, and its priority. */
+    private record Plan(TaskType type, int everyDays, Priority priority, String note) { }
+
+    private static final List<Plan> DEFAULT_PLAN = List.of(
+            new Plan(TaskType.WATERING, 3, Priority.HIGH, "Water the plant"),
+            new Plan(TaskType.HEALTH_CHECK, 7, Priority.MEDIUM, "Check leaves, soil and pests"),
+            new Plan(TaskType.FERTILIZING, 14, Priority.LOW, "Apply fertilizer"),
+            new Plan(TaskType.PRUNING, 30, Priority.LOW, "Prune dead or overgrown growth"));
+
+    static final int SCHEDULE_DAYS = 30;
+    private static final LocalTime TASK_TIME = LocalTime.of(9, 0);
+
     private final CareTaskRepository careTaskRepository;
+    private final PlantRepository plantRepository;
+    private final UserRepository userRepository;
 
-    public List<CareTask> getTasks(Long plantId, LocalDateTime date, CareTask.Status status) {
+    // ---------- reads
+
+    public List<CareTask> getTasks(Long plantId, LocalDateTime date, Status status) {
+        List<CareTask> tasks;
         if (plantId != null && status != null) {
-            return careTaskRepository.findByPlantIdAndStatus(plantId, status);
+            tasks = careTaskRepository.findByPlantIdAndStatus(plantId, status);
         } else if (plantId != null) {
-            return careTaskRepository.findByPlantId(plantId);
+            tasks = careTaskRepository.findByPlantId(plantId);
         } else if (date != null) {
-            LocalDateTime start = date.withHour(0).withMinute(0);
-            LocalDateTime end = date.withHour(23).withMinute(59);
-            return careTaskRepository.findByScheduledDateBetween(start, end);
+            tasks = careTaskRepository.findByScheduledDateBetween(
+                    date.toLocalDate().atStartOfDay(), date.toLocalDate().plusDays(1).atStartOfDay());
+        } else {
+            tasks = careTaskRepository.findAll();
         }
-        return careTaskRepository.findAll();
-    }
-
-    public CareTask save(CareTask careTask) {
-        return careTaskRepository.save(careTask);
+        return visible(tasks);
     }
 
     public Optional<CareTask> getById(Long id) {
-        return careTaskRepository.findById(id);
-    }
-
-    public void delete(Long id) {
-        careTaskRepository.deleteById(id);
-    }
-
-    public CareTask markComplete(Long id) {
-        CareTask task = careTaskRepository.findById(id).orElseThrow(() -> new RuntimeException("Task not found"));
-        task.setStatus(CareTask.Status.COMPLETED);
-        task.setCompletedDate(LocalDateTime.now());
-        return careTaskRepository.save(task);
+        return careTaskRepository.findById(id).filter(t -> Access.canAccess(t.getPlant()));
     }
 
     public List<CareTask> getUpcoming() {
-        return careTaskRepository.findUpcoming();
+        return visible(careTaskRepository.findUpcoming());
     }
 
     public List<CareTask> getOverdue() {
-        return careTaskRepository.findOverdue();
+        return visible(careTaskRepository.findOverdue());
     }
 
     public List<CareTask> getCalendar(int month, int year) {
-        YearMonth yearMonth = YearMonth.of(year, month);
-        LocalDateTime start = yearMonth.atDay(1).atStartOfDay();
-        LocalDateTime end = yearMonth.atEndOfMonth().atTime(23, 59);
-        return careTaskRepository.findByScheduledDateBetween(start, end);
+        YearMonth yearMonth;
+        try {
+            yearMonth = YearMonth.of(year, month);
+        } catch (java.time.DateTimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid month or year.");
+        }
+        return visible(careTaskRepository.findByScheduledDateBetween(
+                yearMonth.atDay(1).atStartOfDay(), yearMonth.plusMonths(1).atDay(1).atStartOfDay()));
+    }
+
+    // ---------- writes
+
+    public CareTask create(CareTaskRequest request) {
+        if (request.getPlantId() == null || request.getTaskType() == null || request.getScheduledDate() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "plantId, taskType and scheduledDate are required.");
+        }
+        Plant plant = accessiblePlant(request.getPlantId());
+        return careTaskRepository.save(CareTask.builder()
+                .plant(plant)
+                .taskType(request.getTaskType())
+                .scheduledDate(request.getScheduledDate())
+                .status(request.getStatus() != null ? request.getStatus() : Status.PENDING)
+                .priority(request.getPriority() != null ? request.getPriority() : Priority.MEDIUM)
+                .notes(request.getNotes())
+                .reminderSent(false)
+                .autoGenerated(false)
+                .createdDate(LocalDateTime.now())
+                .build());
+    }
+
+    public CareTask update(Long id, CareTaskRequest request) {
+        CareTask task = requireTask(id);
+        if (request.getTaskType() != null) {
+            task.setTaskType(request.getTaskType());
+        }
+        if (request.getScheduledDate() != null && !request.getScheduledDate().equals(task.getScheduledDate())) {
+            task.setScheduledDate(request.getScheduledDate());
+            task.setReminderSent(false);
+        }
+        if (request.getStatus() != null) {
+            task.setStatus(request.getStatus());
+        }
+        if (request.getPriority() != null) {
+            task.setPriority(request.getPriority());
+        }
+        if (request.getNotes() != null) {
+            task.setNotes(request.getNotes());
+        }
+        return careTaskRepository.save(task);
+    }
+
+    public void delete(Long id) {
+        careTaskRepository.delete(requireTask(id));
+    }
+
+    public CareTask markComplete(Long id) {
+        CareTask task = requireTask(id);
+        complete(task);
+        return careTaskRepository.save(task);
     }
 
     public List<CareTask> bulkComplete(List<Long> ids) {
-        List<CareTask> tasks = careTaskRepository.findAllById(ids);
-        tasks.forEach(task -> {
-            task.setStatus(CareTask.Status.COMPLETED);
-            task.setCompletedDate(LocalDateTime.now());
-        });
+        List<CareTask> tasks = visible(careTaskRepository.findAllById(ids));
+        tasks.forEach(this::complete);
         return careTaskRepository.saveAll(tasks);
     }
 
     public CareTask reschedule(Long id, LocalDateTime newDate) {
-        CareTask task = careTaskRepository.findById(id).orElseThrow(() -> new RuntimeException("Task not found"));
+        CareTask task = requireTask(id);
         task.setScheduledDate(newDate);
-        task.setStatus(CareTask.Status.PENDING);
+        task.setStatus(Status.PENDING);
+        task.setReminderSent(false);
         return careTaskRepository.save(task);
     }
 
-    // stub for generate schedule
+    /**
+     * Creates recurring tasks for the next {@value #SCHEDULE_DAYS} days from the default care plan.
+     * A task type that already has pending auto-generated tasks is skipped, so calling this twice
+     * does not create duplicates.
+     */
+    @Transactional
     public List<CareTask> generateSchedule(Long plantId) {
-        // Implement based on plant care plan
-        throw new UnsupportedOperationException("Schedule generation not implemented yet");
+        Plant plant = accessiblePlant(plantId);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime first = now.toLocalDate().plusDays(1).atTime(TASK_TIME);
+        LocalDateTime end = now.plusDays(SCHEDULE_DAYS);
+
+        List<CareTask> existing = careTaskRepository.findByPlantId(plantId);
+        List<CareTask> created = new java.util.ArrayList<>();
+        for (Plan plan : DEFAULT_PLAN) {
+            boolean alreadyScheduled = existing.stream().anyMatch(t -> t.getTaskType() == plan.type()
+                    && t.getStatus() == Status.PENDING && Boolean.TRUE.equals(t.getAutoGenerated()));
+            if (alreadyScheduled) {
+                continue;
+            }
+            for (LocalDateTime due = first; !due.isAfter(end); due = due.plusDays(plan.everyDays())) {
+                created.add(CareTask.builder()
+                        .plant(plant)
+                        .taskType(plan.type())
+                        .scheduledDate(due)
+                        .status(Status.PENDING)
+                        .priority(plan.priority())
+                        .notes(plan.note())
+                        .reminderSent(false)
+                        .autoGenerated(true)
+                        .createdDate(now)
+                        .build());
+            }
+        }
+        List<CareTask> saved = careTaskRepository.saveAll(created);
+        saved.sort(Comparator.comparing(CareTask::getScheduledDate));
+        return saved;
+    }
+
+    /** Task counts for the current user's plants. */
+    public Map<String, Object> statistics() {
+        List<CareTask> tasks = visible(careTaskRepository.findAll());
+        LocalDateTime now = LocalDateTime.now();
+
+        long pending = tasks.stream().filter(t -> t.getStatus() == Status.PENDING).count();
+        long completed = tasks.stream().filter(t -> t.getStatus() == Status.COMPLETED).count();
+        long skipped = tasks.stream().filter(t -> t.getStatus() == Status.SKIPPED).count();
+        long overdue = tasks.stream()
+                .filter(t -> t.getStatus() == Status.PENDING && t.getScheduledDate().isBefore(now)).count();
+        long closed = completed + skipped;
+        double completionRate = closed == 0 && pending == 0 ? 0
+                : Math.round(1000.0 * completed / (completed + pending + skipped)) / 10.0;
+
+        Map<TaskType, Long> byType = new EnumMap<>(TaskType.class);
+        tasks.forEach(t -> byType.merge(t.getTaskType(), 1L, Long::sum));
+
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("total", tasks.size());
+        stats.put("pending", pending);
+        stats.put("completed", completed);
+        stats.put("skipped", skipped);
+        stats.put("overdue", overdue);
+        stats.put("completionRate", completionRate);
+        stats.put("byType", byType);
+        return stats;
+    }
+
+    // ---------- helpers
+
+    private void complete(CareTask task) {
+        task.setStatus(Status.COMPLETED);
+        task.setCompletedDate(LocalDateTime.now());
+        String username = Access.currentUsername();
+        if (username != null) {
+            userRepository.findByUsername(username).ifPresent(task::setCompletedBy);
+        }
+    }
+
+    private List<CareTask> visible(List<CareTask> tasks) {
+        return tasks.stream()
+                .filter(t -> Access.canAccess(t.getPlant()))
+                .sorted(Comparator.comparing(CareTask::getScheduledDate))
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+    }
+
+    private CareTask requireTask(Long id) {
+        return getById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Care task not found"));
+    }
+
+    private Plant accessiblePlant(Long plantId) {
+        return plantRepository.findById(plantId)
+                .filter(Access::canAccess)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plant not found"));
     }
 }

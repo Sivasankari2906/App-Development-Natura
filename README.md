@@ -20,6 +20,9 @@ Secrets are not stored in the repo. The backend reads them from environment vari
 | `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | no | If all three are set, an admin account is created at startup. Admin cannot be chosen at registration. |
 | `CORS_ALLOWED_ORIGINS` | no | Comma-separated browser origins, defaults to `http://localhost:3000,http://127.0.0.1:3000` |
 
+| `FRONTEND_URL` | no | Base URL used in password reset links, defaults to `http://localhost:3000` |
+| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `MAIL_FROM` | no | SMTP settings. Without `SPRING_MAIL_HOST` emails are only written to the server log, which is fine for local development. |
+
 Copy `.env.example` to `.env` and fill in the values. `.env` is git-ignored.
 Generate a JWT secret with `openssl rand -base64 48`.
 
@@ -44,9 +47,19 @@ npm start
 
 The frontend calls the API at `http://localhost:8080/api`.
 
+## Password reset and reminders
+
+- **Password reset:** `POST /api/auth/forgot-password` emails a single-use link that expires in 30 minutes. Only a hash of the token is stored, and the response is the same whether or not the email exists. The `/reset-password?token=...` page sets the new password.
+- **Care reminders:** a scheduled job runs hourly and emails each user one digest of pending care tasks due in the next 24 hours, once per task. A user can opt out with `{"email": false}` or `{"careReminders": false}` in their notification preferences. Tune it with `app.reminders.*` in `application.properties`.
+- **Local development:** with no SMTP configured, both emails are printed in the backend log.
+
+## Data access
+
+Plants and care tasks belong to the user who created them. Other users get 404 for them, and admins can see everything.
+
 ## Tests
 
-Backend unit tests cover JWT creation and validation (valid, expired, wrong-secret and malformed tokens):
+Backend unit tests cover JWT handling, password reset, care task scheduling, statistics and access control, and reminders:
 
 ```bash
 cd backend
@@ -58,6 +71,6 @@ cd backend
 - Register, login and password reset with JWT access and refresh tokens
 - Role-based access, with admin-only endpoints
 - Plant and species management
-- Recurring care schedule generation, upcoming and overdue tasks, calendar view and statistics
+- Care schedule generation (30 days from a default plan), upcoming and overdue tasks, calendar view, completion statistics, and email reminders
 - Plant health records, symptom checker and treatments
-- Environment readings (manual and sensor data) with alerts
+- Environment readings (manual and sensor data) and trends. Alerts, sensor calibration and optimal-conditions endpoints are placeholders and not implemented yet.

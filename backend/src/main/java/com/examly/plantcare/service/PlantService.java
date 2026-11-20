@@ -8,7 +8,11 @@ import com.examly.plantcare.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.examly.plantcare.util.Access;
 
 import java.util.*;
 
@@ -26,11 +30,14 @@ public class PlantService {
 
     // ✅ Basic CRUD
     public Page<Plant> getAllPlants(Pageable pageable) {
-        return plantRepository.findAll(pageable);
+        if (Access.isAdmin()) {
+            return plantRepository.findAll(pageable);
+        }
+        return plantRepository.findByOwnerUsername(Access.currentUsername(), pageable);
     }
 
     public Optional<Plant> getPlantById(Long id) {
-        return plantRepository.findById(id);
+        return plantRepository.findById(id).filter(Access::canAccess);
     }
 
     public Plant savePlant(Plant plant) {
@@ -39,6 +46,7 @@ public class PlantService {
 
     public Plant updatePlant(Long id, Plant plantDetails) {
         return plantRepository.findById(id)
+                .filter(Access::canAccess)
                 .map(plant -> {
                     plant.setNickname(plantDetails.getNickname());
                     plant.setLocation(plantDetails.getLocation());
@@ -46,11 +54,14 @@ public class PlantService {
                     plant.setNotes(plantDetails.getNotes());
                     return plantRepository.save(plant);
                 })
-                .orElseThrow(() -> new RuntimeException("Plant not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plant not found"));
     }
 
     public void deletePlant(Long id) {
-        plantRepository.deleteById(id);
+        Plant plant = plantRepository.findById(id)
+                .filter(Access::canAccess)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plant not found"));
+        plantRepository.delete(plant);
     }
 
     public Plant createPlantForLoggedInUser(String username, Plant plant) {

@@ -41,6 +41,15 @@ npm start
 
 The frontend calls the API at `http://localhost:8080/api`.
 
+## Tests
+
+Backend unit tests cover JWT creation and validation (valid, expired, wrong-secret and malformed tokens):
+
+```bash
+cd backend
+./mvnw test
+```
+
 ## Features
 
 - Register, login and password reset with JWT access and refresh tokens

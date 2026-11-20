@@ -17,6 +17,9 @@ Secrets are not stored in the repo. The backend reads them from environment vari
 | `DB_USERNAME` | no | MySQL user, defaults to `root` |
 | `DB_URL` | no | JDBC URL, defaults to `jdbc:mysql://localhost:3306/natura?createDatabaseIfNotExist=true` |
 
+| `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | no | If all three are set, an admin account is created at startup. Admin cannot be chosen at registration. |
+| `CORS_ALLOWED_ORIGINS` | no | Comma-separated browser origins, defaults to `http://localhost:3000,http://127.0.0.1:3000` |
+
 Copy `.env.example` to `.env` and fill in the values. `.env` is git-ignored.
 Generate a JWT secret with `openssl rand -base64 48`.
 

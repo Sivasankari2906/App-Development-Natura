@@ -17,7 +17,6 @@ const RegisterForm = () => {
   const [errors, setErrors] = useState({});
 
   const roles = [
-    "ADMIN",
     "PLANT_CARE_SPECIALIST",
     "PREMIUM_PLANT_OWNER",
     "STANDARD_PLANT_OWNER",

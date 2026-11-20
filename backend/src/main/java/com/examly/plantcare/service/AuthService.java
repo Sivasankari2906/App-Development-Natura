@@ -55,6 +55,10 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Username, email, password and role are required.");
         }
+        if (request.getRole() == User.Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Admin accounts cannot be created through registration.");
+        }
         if (username.length() > 50 || email.length() > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Username must be at most 50 characters and email at most 100.");
@@ -69,11 +73,13 @@ public class AuthService {
 
     public AuthResponse login(LoginRequest request) {
         Optional<User> userOpt = userRepository.findByUsername(request.getUsername());
-        if (userOpt.isEmpty()) throw new RuntimeException("User not found");
+        if (userOpt.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password.");
+        }
 
         User user = userOpt.get();
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid credentials");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password.");
         }
 
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());

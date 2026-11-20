@@ -3,6 +3,7 @@ package com.examly.plantcare.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -18,6 +19,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -55,6 +57,7 @@ public class SecurityConfig {
             .authorizeRequests(auth -> auth
                 .antMatchers("/api/auth/**").permitAll()  // Public access to auth routes
                 .antMatchers(SWAGGER_WHITELIST).permitAll()
+                .antMatchers("/api/admin/**").hasRole("ADMIN")  // Admin-only API
                 .anyRequest().authenticated()  // Authenticate any other request
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)  // Add JWT filter

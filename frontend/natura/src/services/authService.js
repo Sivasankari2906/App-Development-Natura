@@ -27,7 +27,10 @@ export const register = async (userData) => {
     const response = await axios.post(`${API_URL}/register`, userData);
     return response.data;
   } catch (error) {
-    throw new Error(error.response?.data?.message || "Registration failed.");
+    if (!error.response) {
+      throw new Error("Cannot reach the server. Check that the backend is running.");
+    }
+    throw new Error(error.response.data?.message || "Registration failed.");
   }
 };
 

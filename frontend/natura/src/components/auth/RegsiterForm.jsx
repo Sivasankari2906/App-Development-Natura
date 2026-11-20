@@ -60,7 +60,7 @@ const RegisterForm = () => {
       await register(userData);
       setSuccess("Registration successful! Please login.");
     } catch (err) {
-      setSuccess("Registration failed.");
+      setSuccess(err.message || "Registration failed.");
     }
   };
 

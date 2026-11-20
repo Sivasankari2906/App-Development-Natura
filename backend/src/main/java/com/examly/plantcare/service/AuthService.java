@@ -2,7 +2,9 @@ package com.examly.plantcare.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.examly.plantcare.dto.AuthResponse;
 import com.examly.plantcare.dto.LoginRequest;
@@ -24,6 +26,8 @@ public class AuthService {
     private final JwtUtil jwtUtil;
 
     public AuthResponse register(RegisterRequest request) {
+        validateRegistration(request);
+
         User user = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
@@ -40,6 +44,27 @@ public class AuthService {
         String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), user.getRole().name());
 
         return new AuthResponse(token, refreshToken);
+    }
+
+    private void validateRegistration(RegisterRequest request) {
+        String username = request.getUsername();
+        String email = request.getEmail();
+        if (username == null || username.isBlank() || email == null || email.isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank()
+                || request.getRole() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Username, email, password and role are required.");
+        }
+        if (username.length() > 50 || email.length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Username must be at most 50 characters and email at most 100.");
+        }
+        if (userRepository.existsByUsername(username)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username is already taken.");
+        }
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered.");
+        }
     }
 
     public AuthResponse login(LoginRequest request) {

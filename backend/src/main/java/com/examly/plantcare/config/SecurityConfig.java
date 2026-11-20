@@ -1,5 +1,6 @@
 package com.examly.plantcare.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -20,6 +21,10 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    // Browser origins allowed to call the API (comma-separated, override with CORS_ALLOWED_ORIGINS)
+    @Value("${app.cors.allowed-origins:http://localhost:3000,http://127.0.0.1:3000}")
+    private List<String> allowedOrigins;
 
     // Constructor-based injection of the JWT filter
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
@@ -66,7 +71,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfig = new CorsConfiguration();
         corsConfig.setAllowCredentials(true);
-        corsConfig.setAllowedOrigins(List.of("http://localhost:3000", "http://127.0.0.1:5501"));  // Your front-end domains
+        corsConfig.setAllowedOrigins(allowedOrigins);
         corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));  // Allowed HTTP methods
         corsConfig.setAllowedHeaders(List.of("Authorization", "Content-Type"));  // Allowed headers for authorization and content type
         corsConfig.setExposedHeaders(List.of("Authorization"));  // Expose Authorization header to front-end for subsequent requests

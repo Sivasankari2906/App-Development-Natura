@@ -3,6 +3,9 @@ package com.examly.plantcare.repository;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.examly.plantcare.entity.PasswordResetToken;
@@ -13,4 +16,9 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     Optional<PasswordResetToken> findByTokenHash(String tokenHash);
 
     void deleteByUser(User user);
+
+    /** Atomically marks a token used. Returns 0 if it was already used, so a link works only once. */
+    @Modifying
+    @Query("UPDATE PasswordResetToken t SET t.used = true WHERE t.id = :id AND t.used = false")
+    int markUsed(@Param("id") Long id);
 }

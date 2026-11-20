@@ -55,7 +55,7 @@ class ReminderServiceTest {
         User alice = user(1, "alice", null);
         CareTask a1 = dueTask(alice, "Fern", TaskType.WATERING);
         CareTask a2 = dueTask(alice, "Cactus", TaskType.PRUNING);
-        when(careTasks.findDueForReminder(eq(Status.PENDING), any())).thenReturn(List.of(a1, a2));
+        when(careTasks.findDueForReminder(eq(Status.PENDING), any(), any())).thenReturn(List.of(a1, a2));
         when(email.send(anyString(), anyString(), anyString())).thenReturn(true);
 
         int reminded = service.sendDueReminders();
@@ -66,12 +66,13 @@ class ReminderServiceTest {
         assertTrue(body.getValue().contains("WATERING for Fern"));
         assertTrue(body.getValue().contains("PRUNING for Cactus"));
         assertTrue(a1.getReminderSent() && a2.getReminderSent());
+        verify(careTasks).markReminded(any());
     }
 
     @Test
     void usersWhoTurnedRemindersOffAreSkipped() {
         CareTask t = dueTask(user(2, "bob", "{\"email\":false}"), "Fern", TaskType.WATERING);
-        when(careTasks.findDueForReminder(eq(Status.PENDING), any())).thenReturn(List.of(t));
+        when(careTasks.findDueForReminder(eq(Status.PENDING), any(), any())).thenReturn(List.of(t));
 
         assertEquals(0, service.sendDueReminders());
         verifyNoInteractions(email);
@@ -81,11 +82,22 @@ class ReminderServiceTest {
     @Test
     void failedEmailLeavesTasksForTheNextRun() {
         CareTask t = dueTask(user(3, "cara", null), "Fern", TaskType.WATERING);
-        when(careTasks.findDueForReminder(eq(Status.PENDING), any())).thenReturn(List.of(t));
+        when(careTasks.findDueForReminder(eq(Status.PENDING), any(), any())).thenReturn(List.of(t));
         when(email.send(anyString(), anyString(), anyString())).thenReturn(false);
 
         assertEquals(0, service.sendDueReminders());
         assertFalse(t.getReminderSent());
-        verify(careTasks, never()).saveAll(any());
+        verify(careTasks, never()).markReminded(any());
+    }
+
+    @Test
+    void optOutIsHonouredWhenTheDatabaseReturnsTheJsonAsAQuotedString() {
+        // H2 returns a JSON column as a JSON string, i.e. with the text quoted and escaped.
+        User quoted = user(4, "dave", "\"{\\\"email\\\":false}\"");
+        CareTask t = dueTask(quoted, "Fern", TaskType.WATERING);
+        when(careTasks.findDueForReminder(eq(Status.PENDING), any(), any())).thenReturn(List.of(t));
+
+        assertEquals(0, service.sendDueReminders());
+        verifyNoInteractions(email);
     }
 }

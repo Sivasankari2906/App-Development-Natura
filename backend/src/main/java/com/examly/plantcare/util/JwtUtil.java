@@ -32,19 +32,30 @@ public class JwtUtil {
     }
 
     public String generateToken(String username, String role) {
-        return buildToken(username, role, accessExpiryMs);
+        return buildToken(username, role, accessExpiryMs, "access", null);
     }
 
     // Include role in refresh token too (your AuthService reads role from it)
     public String generateRefreshToken(String username, String role) {
-        return buildToken(username, role, refreshExpiryMs);
+        return buildToken(username, role, refreshExpiryMs, "refresh", null);
     }
 
-    private String buildToken(String username, String role, long ttlMs) {
+    /** Refresh token bound to a password version, so a password change invalidates it. */
+    public String generateRefreshToken(String username, String role, String passwordVersion) {
+        return buildToken(username, role, refreshExpiryMs, "refresh", passwordVersion);
+    }
+
+    private String buildToken(String username, String role, long ttlMs, String type, String passwordVersion) {
         long now = System.currentTimeMillis();
+        Map<String, Object> claims = new java.util.HashMap<>();
+        claims.put("role", role);
+        claims.put("typ", type);
+        if (passwordVersion != null) {
+            claims.put("pv", passwordVersion);
+        }
         return Jwts.builder()
                 .setSubject(username)
-                .addClaims(Map.of("role", role))
+                .addClaims(claims)
                 .setIssuedAt(new Date(now))
                 .setExpiration(new Date(now + ttlMs))
                 .signWith(key, SignatureAlgorithm.HS256)
@@ -58,6 +69,19 @@ public class JwtUtil {
     public String getRoleFromToken(String token) {
         Object r = getAllClaims(token).get("role");
         return r == null ? null : r.toString();
+    }
+
+    public boolean isAccessToken(String token) {
+        return "access".equals(getAllClaims(token).get("typ"));
+    }
+
+    public boolean isRefreshToken(String token) {
+        return "refresh".equals(getAllClaims(token).get("typ"));
+    }
+
+    public String getPasswordVersion(String token) {
+        Object v = getAllClaims(token).get("pv");
+        return v == null ? null : v.toString();
     }
 
     public boolean isTokenValid(String token) {

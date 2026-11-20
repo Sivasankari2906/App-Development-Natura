@@ -34,6 +34,30 @@ const Settings = ({ isOpen, onClose }) => {
     }
   };
 
+  const parsePrefs = (json) => {
+    try {
+      let parsed = JSON.parse(json || '{}');
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      return { email: true, careReminders: true, ...parsed };
+    } catch (e) {
+      return { email: true, careReminders: true };
+    }
+  };
+  const prefs = parsePrefs(user?.notificationPreferences);
+
+  const updatePref = async (name, value) => {
+    const next = { ...prefs, [name]: value };
+    try {
+      const token = localStorage.getItem("accessToken");
+      await axios.put('http://localhost:8080/api/auth/me/notifications', { [name]: value }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser({ ...user, notificationPreferences: JSON.stringify(next) });
+    } catch (error) {
+      console.error('Error saving notification preference:', error);
+    }
+  };
+
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -200,23 +224,18 @@ const Settings = ({ isOpen, onClose }) => {
                   <div className="preferences-grid">
                     <div className="preference-item">
                       <label className="toggle-label">
-                        <input type="checkbox" defaultChecked />
+                        <input type="checkbox" checked={prefs.email !== false}
+                          onChange={(e) => updatePref('email', e.target.checked)} />
                         <span className="toggle-slider"></span>
                         Email notifications
                       </label>
                     </div>
                     <div className="preference-item">
                       <label className="toggle-label">
-                        <input type="checkbox" defaultChecked />
+                        <input type="checkbox" checked={prefs.careReminders !== false}
+                          onChange={(e) => updatePref('careReminders', e.target.checked)} />
                         <span className="toggle-slider"></span>
                         Care reminders
-                      </label>
-                    </div>
-                    <div className="preference-item">
-                      <label className="toggle-label">
-                        <input type="checkbox" />
-                        <span className="toggle-slider"></span>
-                        Weekly reports
                       </label>
                     </div>
                   </div>

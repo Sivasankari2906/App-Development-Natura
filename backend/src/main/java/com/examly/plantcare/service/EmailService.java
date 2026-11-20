@@ -23,16 +23,25 @@ public class EmailService {
     @Value("${app.mail.from:no-reply@natura.local}")
     private String from;
 
+    /** When SMTP is missing, print the full email (including reset links) to the log. Local development only. */
+    @Value("${app.mail.log-body:false}")
+    private boolean logBody;
+
     public EmailService(ObjectProvider<JavaMailSender> mailSender) {
         this.mailSender = mailSender;
     }
 
-    /** @return true if the message was sent (or logged in development mode). */
+    /** @return true if the message was sent, or logged when app.mail.log-body is on. */
     public boolean send(String to, String subject, String body) {
         JavaMailSender sender = mailSender.getIfAvailable();
         if (sender == null) {
-            log.info("SMTP is not configured, so this email is only logged. To: {} | Subject: {}\n{}", to, subject, body);
-            return true;
+            if (logBody) {
+                log.info("SMTP is not configured, so this email is only logged. To: {} | Subject: {}\n{}", to, subject, body);
+                return true;
+            }
+            log.warn("SMTP is not configured, so the email to {} ('{}') was not sent. "
+                    + "Set SPRING_MAIL_HOST, or APP_MAIL_LOG_BODY=true for local development.", to, subject);
+            return false;
         }
         try {
             SimpleMailMessage message = new SimpleMailMessage();

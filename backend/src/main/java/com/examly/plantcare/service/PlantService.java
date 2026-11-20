@@ -67,6 +67,11 @@ public class PlantService {
     public Plant createPlantForLoggedInUser(String username, Plant plant) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        // Never trust ids or nested collections from the request body.
+        plant.setId(null);
+        plant.setCareTasks(null);
+        plant.setEnvironmentDataList(new ArrayList<>());
+        plant.setHealthRecords(new ArrayList<>());
         plant.setOwner(user);
         return plantRepository.save(plant);
     }

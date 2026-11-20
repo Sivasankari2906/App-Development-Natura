@@ -60,7 +60,7 @@ public class AuthService {
         userRepository.save(user);
 
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), user.getRole().name());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), user.getRole().name(), passwordVersion(user));
 
         return new AuthResponse(token, refreshToken);
     }
@@ -102,7 +102,7 @@ public class AuthService {
         }
 
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), user.getRole().name());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), user.getRole().name(), passwordVersion(user));
 
         return new AuthResponse(token, refreshToken);
     }
@@ -112,14 +112,43 @@ public class AuthService {
         return "Logged out successfully.";
     }
 
-    public AuthResponse refreshToken(String refreshToken) {
-        String username = jwtUtil.getUsernameFromToken(refreshToken);
-        String role = jwtUtil.getRoleFromToken(refreshToken);
-        String newAccessToken = jwtUtil.generateToken(username, role);
-        String newRefreshToken = jwtUtil.generateRefreshToken(username, role);
-        return new AuthResponse(newAccessToken, newRefreshToken);
+    public AuthResponse refreshToken(String header) {
+        String token = header != null && header.startsWith("Bearer ") ? header.substring(7) : header;
+        if (token == null || !jwtUtil.isTokenValid(token) || !jwtUtil.isRefreshToken(token)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token.");
+        }
+        User user = userRepository.findByUsername(jwtUtil.getUsernameFromToken(token))
+                .filter(u -> !Boolean.FALSE.equals(u.getIsActive()))
+                .filter(u -> passwordVersion(u).equals(jwtUtil.getPasswordVersion(token)))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token."));
+        return new AuthResponse(
+                jwtUtil.generateToken(user.getUsername(), user.getRole().name()),
+                jwtUtil.generateRefreshToken(user.getUsername(), user.getRole().name(), passwordVersion(user)));
     }
 
+    /** Changes whenever the password changes, so older refresh tokens stop working. */
+    private static String passwordVersion(User user) {
+        return hash(user.getPasswordHash()).substring(0, 16);
+    }
+
+    @Transactional
+    public void updateNotificationPreferences(String username, Boolean email, Boolean careReminders) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not logged in."));
+        java.util.Map<String, Object> prefs = new java.util.LinkedHashMap<>();
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            prefs.putAll(mapper.convertValue(
+                    com.examly.plantcare.util.NotificationPrefs.parse(mapper, user.getNotificationPreferences()),
+                    java.util.Map.class));
+            if (email != null) prefs.put("email", email);
+            if (careReminders != null) prefs.put("careReminders", careReminders);
+            user.setNotificationPreferences(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(prefs));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid notification preferences.");
+        }
+        userRepository.save(user);
+    }
 
     @Transactional
     public String forgotPassword(String email) {
@@ -165,11 +194,13 @@ public class AuthService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "This reset link is invalid or has expired."));
 
+        if (resetTokens.markUsed(token.getId()) != 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This reset link is invalid or has expired.");
+        }
+        token.setUsed(true);
         User user = token.getUser();
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
-        token.setUsed(true);
-        resetTokens.save(token);
         return "Password has been reset. You can now log in.";
     }
 

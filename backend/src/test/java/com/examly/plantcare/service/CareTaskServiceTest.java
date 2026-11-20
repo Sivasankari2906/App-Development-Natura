@@ -68,7 +68,7 @@ class CareTaskServiceTest {
 
     @Test
     void generateSchedulePlansAllTaskTypesOverThirtyDaysWithoutDuplicates() {
-        when(plants.findById(10L)).thenReturn(Optional.of(alicesPlant));
+        when(plants.findByIdForUpdate(10L)).thenReturn(Optional.of(alicesPlant));
         when(careTasks.findByPlantId(10L)).thenReturn(new ArrayList<>());
         when(careTasks.saveAll(any())).thenAnswer(i -> new ArrayList<>((List<CareTask>) i.getArgument(0)));
 
@@ -86,7 +86,7 @@ class CareTaskServiceTest {
 
     @Test
     void generateScheduleSkipsTypesThatAlreadyHavePendingAutoTasks() {
-        when(plants.findById(10L)).thenReturn(Optional.of(alicesPlant));
+        when(plants.findByIdForUpdate(10L)).thenReturn(Optional.of(alicesPlant));
         when(careTasks.findByPlantId(10L)).thenReturn(List.of(task(alicesPlant, Status.PENDING, LocalDateTime.now().plusDays(1))));
         when(careTasks.saveAll(any())).thenAnswer(i -> new ArrayList<>((List<CareTask>) i.getArgument(0)));
 
@@ -100,7 +100,7 @@ class CareTaskServiceTest {
         loginAs("bob", "ROLE_STANDARD_PLANT_OWNER");
         CareTask alicesTask = task(alicesPlant, Status.PENDING, LocalDateTime.now().plusDays(1));
         alicesTask.setId(5L);
-        when(plants.findById(10L)).thenReturn(Optional.of(alicesPlant));
+        when(plants.findByIdForUpdate(10L)).thenReturn(Optional.of(alicesPlant));
         when(careTasks.findById(5L)).thenReturn(Optional.of(alicesTask));
         when(careTasks.findAll()).thenReturn(List.of(alicesTask));
 

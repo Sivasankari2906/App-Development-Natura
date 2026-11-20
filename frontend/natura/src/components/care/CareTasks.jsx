@@ -12,7 +12,8 @@ import "../../styles/professional-components.css";
 const CareTasks = ({ plantId }) => {
   const [careTasks, setCareTasks] = useState([]);
   const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(plantId));
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const fetchCareTasks = useCallback(async () => {
@@ -41,11 +42,15 @@ const CareTasks = ({ plantId }) => {
   }, [plantId, fetchCareTasks]);
 
   const run = async (action, failureMessage) => {
+    if (busy) return;
+    setBusy(true);
     try {
       await action();
       await fetchCareTasks();
     } catch (err) {
       setError(err.response?.data?.message || failureMessage);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -68,6 +73,7 @@ const CareTasks = ({ plantId }) => {
   const isOverdue = (task) =>
     task.status === 'PENDING' && new Date(task.scheduledDate) < new Date();
 
+  if (!plantId) return <p>Select a plant to see its care tasks.</p>;
   if (loading) return <p>Loading care tasks...</p>;
 
   return (
@@ -79,8 +85,8 @@ const CareTasks = ({ plantId }) => {
         </p>
       )}
       {error && <p className="error" role="alert">{error}</p>}
-      <button className="btn-generate" onClick={handleGenerate}>
-        Generate 30-day schedule
+      <button className="btn-generate" onClick={handleGenerate} disabled={busy}>
+        {busy ? 'Working...' : 'Generate 30-day schedule'}
       </button>
       {careTasks.length === 0 ? (
         <div className="empty-state">

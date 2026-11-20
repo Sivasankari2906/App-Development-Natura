@@ -4,7 +4,7 @@ import { resetPassword } from "../../services/authService";
 import "../../styles/auth.css";
 
 const PASSWORD_RULE =
-  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams();

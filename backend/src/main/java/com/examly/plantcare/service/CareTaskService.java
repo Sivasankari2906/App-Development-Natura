@@ -63,6 +63,9 @@ public class CareTaskService {
         } else {
             tasks = careTaskRepository.findAll();
         }
+        if (status != null) {
+            tasks = tasks.stream().filter(t -> t.getStatus() == status).toList();
+        }
         return visible(tasks);
     }
 
@@ -162,7 +165,9 @@ public class CareTaskService {
      */
     @Transactional
     public List<CareTask> generateSchedule(Long plantId) {
-        Plant plant = accessiblePlant(plantId);
+        Plant plant = plantRepository.findByIdForUpdate(plantId)
+                .filter(Access::canAccess)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plant not found"));
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime first = now.toLocalDate().plusDays(1).atTime(TASK_TIME);
         LocalDateTime end = now.plusDays(SCHEDULE_DAYS);

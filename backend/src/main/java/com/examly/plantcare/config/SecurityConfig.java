@@ -3,6 +3,7 @@ package com.examly.plantcare.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -58,6 +59,9 @@ public class SecurityConfig {
                 .antMatchers("/api/auth/**").permitAll()  // Public access to auth routes
                 .antMatchers(SWAGGER_WHITELIST).permitAll()
                 .antMatchers("/api/admin/**").hasRole("ADMIN")  // Admin-only API
+                .antMatchers(HttpMethod.POST, "/api/species/**").hasRole("ADMIN")  // Shared species data
+                .antMatchers(HttpMethod.PUT, "/api/species/**").hasRole("ADMIN")
+                .antMatchers(HttpMethod.DELETE, "/api/species/**").hasRole("ADMIN")
                 .anyRequest().authenticated()  // Authenticate any other request
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)  // Add JWT filter

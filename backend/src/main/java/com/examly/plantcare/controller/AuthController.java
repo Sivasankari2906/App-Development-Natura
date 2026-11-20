@@ -39,6 +39,14 @@ public class AuthController {
         return ResponseEntity.ok(authService.login(request));
     }
 
+    @PutMapping("/me/notifications")
+    public ResponseEntity<?> updateNotifications(@RequestBody java.util.Map<String, Boolean> prefs) {
+        authService.updateNotificationPreferences(
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName(),
+                prefs.get("email"), prefs.get("careReminders"));
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@RequestHeader("Authorization") String token) {
         return ResponseEntity.ok(authService.logout(token));

@@ -95,6 +95,7 @@ class PasswordResetTest {
         verify(resetTokens).save(saved.capture());
         PasswordResetToken token = saved.getValue();
         when(resetTokens.findByTokenHash(token.getTokenHash())).thenReturn(Optional.of(token));
+        when(resetTokens.markUsed(any())).thenReturn(1);
 
         authService.resetPassword(request(raw, "NewPassw0rd!"));
 
@@ -124,5 +125,64 @@ class PasswordResetTest {
 
         assertThrows(ResponseStatusException.class, () -> authService.resetPassword(request("bogus", "NewPassw0rd!")));
         assertThrows(ResponseStatusException.class, () -> authService.resetPassword(request("bogus", "weak")));
+    }
+
+    @Test
+    void tokenRedeemedByAConcurrentRequestIsRejected() {
+        String raw = requestResetAndCaptureToken();
+        ArgumentCaptor<PasswordResetToken> saved = ArgumentCaptor.forClass(PasswordResetToken.class);
+        verify(resetTokens).save(saved.capture());
+        PasswordResetToken token = saved.getValue();
+        when(resetTokens.findByTokenHash(token.getTokenHash())).thenReturn(Optional.of(token));
+        when(resetTokens.markUsed(any())).thenReturn(0); // another request got there first
+
+        assertThrows(ResponseStatusException.class, () -> authService.resetPassword(request(raw, "NewPassw0rd!")));
+        assertTrue(encoder.matches("OldPassw0rd!", user.getPasswordHash()));
+    }
+
+    @Test
+    void refreshTokenStopsWorkingAfterThePasswordChanges() {
+        JwtUtil realJwt = new JwtUtil(java.util.Base64.getEncoder().encodeToString(new byte[48]), 60_000L, 600_000L);
+        AuthService real = new AuthService(userRepository, encoder, realJwt, resetTokens, emailService);
+        when(userRepository.findByUsername("rose")).thenReturn(Optional.of(user));
+        user.setRole(User.Role.STANDARD_PLANT_OWNER);
+        LoginRequestHolder.login(real, "rose", "OldPassw0rd!");
+        String refresh = realJwt.generateRefreshToken("rose", "STANDARD_PLANT_OWNER",
+                LoginRequestHolder.version(user));
+
+        assertNotNull(real.refreshToken("Bearer " + refresh));          // works before the change
+        user.setPasswordHash(encoder.encode("NewPassw0rd!"));           // password reset happens
+        assertThrows(ResponseStatusException.class, () -> real.refreshToken("Bearer " + refresh));
+    }
+
+    @Test
+    void accessTokenCannotBeUsedAsRefreshToken() {
+        JwtUtil realJwt = new JwtUtil(java.util.Base64.getEncoder().encodeToString(new byte[48]), 60_000L, 600_000L);
+        AuthService real = new AuthService(userRepository, encoder, realJwt, resetTokens, emailService);
+        String access = realJwt.generateToken("rose", "STANDARD_PLANT_OWNER");
+
+        assertThrows(ResponseStatusException.class, () -> real.refreshToken("Bearer " + access));
+        assertTrue(realJwt.isAccessToken(access));
+        assertFalse(realJwt.isRefreshToken(access));
+    }
+
+    /** Small helpers so the test does not need a full login request. */
+    static final class LoginRequestHolder {
+        static void login(AuthService s, String username, String password) {
+            com.examly.plantcare.dto.LoginRequest r = new com.examly.plantcare.dto.LoginRequest();
+            r.setUsername(username);
+            r.setPassword(password);
+            s.login(r);
+        }
+
+        static String version(User u) {
+            try {
+                java.security.MessageDigest d = java.security.MessageDigest.getInstance("SHA-256");
+                return java.util.HexFormat.of().formatHex(d.digest(u.getPasswordHash()
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 16);
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        }
     }
 }

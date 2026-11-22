@@ -8,7 +8,7 @@ Full-stack plant care app: schedule care tasks, track plant health and monitor e
 
 ## Configuration
 
-Secrets are not stored in the repo. The backend reads them from environment variables:
+Secrets are not stored in the repo. The backend reads them from environment variables (without `DB_PASSWORD` it cannot connect, and without `JWT_SECRET` it will not start):
 
 | Variable | Required | Description |
 |---|---|---|
@@ -74,3 +74,12 @@ cd backend
 - Care schedule generation (30 days from a default plan), upcoming and overdue tasks, calendar view, completion statistics, and email reminders
 - Plant health records (create, list, update). The photo, treatment, recovery-status, symptom-checker, diagnose and trend endpoints are placeholders and not implemented yet.
 - Environment readings (manual and sensor data) and trends. Alerts, sensor calibration and optimal-conditions endpoints are placeholders and not implemented yet.
+
+## Keeping secrets out of the repo
+
+```bash
+brew install gitleaks                 # open-source secret scanner
+git config core.hooksPath .githooks   # run once per clone
+```
+
+Every commit is scanned, and `.gitleaks.toml` also catches literal passwords in config files.
